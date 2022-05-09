@@ -1,4 +1,4 @@
-#[path = "./helpers.rs"] mod helpers;
+use crate::helpers;
 
 use std::io::{BufReader, BufRead, BufWriter};
 use std::io::prelude::*;
@@ -29,14 +29,14 @@ pub struct HttpResponse {
 }
 
 impl HttpMessage {
-    pub fn from_bytes(bytes: &[u8]) ->HttpMessage {
+    pub fn from_bytes(bytes: &[u8]) ->HttpMessage{
         let mut method = String::new();
         let mut path = String::new();
         let mut version = String::new();
         let mut headers = Vec::<HttpHeader>::new();
         let mut body = String::new();
         let reader = BufReader::new(bytes);
-        let mut isHeader = true;
+        let mut is_header = true;
 
         for (index, line) in reader.lines().enumerate() {
             let buffer = line.unwrap();
@@ -48,9 +48,9 @@ impl HttpMessage {
                 version = helpers::ss_get(&mut split);
             }
             else if buffer == "" {
-                isHeader = false;
+                is_header = false;
             }
-            else if isHeader {
+            else if is_header {
                 let mut split = buffer.split(": ");
                 let header = HttpHeader {
                     key: helpers::ss_get(&mut split),
@@ -58,10 +58,9 @@ impl HttpMessage {
                 };
                 headers.push(header);
             }
-            else if isHeader == false {
+            else if is_header == false {
                 body.push_str(&buffer);
             }
-
         }
         return HttpMessage{
             method: method,
@@ -71,7 +70,6 @@ impl HttpMessage {
             body: HttpBody{ data: body},
         };
     }
-
 
     pub fn to_string(&self) {
         println!("Method: {}", self.method);
@@ -86,13 +84,13 @@ impl HttpMessage {
 }
 
 impl HttpResponse {
-    pub fn from_bytes(bytes: &[u8]) ->HttpMessage {
+    pub fn from_bytes(bytes: &[u8]) ->HttpResponse{
         let mut version = String::new();
         let mut status = String::new();
         let mut headers = Vec::<HttpHeader>::new();
         let mut body = String::new();
         let reader = BufReader::new(bytes);
-        let mut isHeader = true;
+        let mut is_header = true;
 
         for (index, line) in reader.lines().enumerate() {
             let buffer = line.unwrap();
@@ -103,9 +101,9 @@ impl HttpResponse {
                 status = helpers::ss_get(&mut split);
             }
             else if buffer == "" {
-                isHeader = false;
+                is_header = false;
             }
-            else if isHeader {
+            else if is_header {
                 let mut split = buffer.split(": ");
                 let header = HttpHeader {
                     key: helpers::ss_get(&mut split),
@@ -113,7 +111,7 @@ impl HttpResponse {
                 };
                 headers.push(header);
             }
-            else if isHeader == false {
+            else if is_header == false {
                 body.push_str(&buffer);
             }
 
@@ -145,7 +143,7 @@ impl HttpClient{
         return HttpClient{}
     }
 
-    pub fn Get(&self, host: &str, path: &str) -> HttpResponse{
+    pub fn get(&self, host: &str, path: &str) -> HttpResponse{
         let message = HttpMessage {
             method: String::from("GET"),
             path: path.to_string(),
@@ -170,20 +168,20 @@ impl HttpClient{
         let mut tcp = TcpStream::connect("172.217.11.228:80").unwrap();
         {
             let mut stream = BufWriter::new(&mut tcp);
-            stream.write(message.method.as_bytes());
-            stream.write(b" ");
-            stream.write(message.path.as_bytes());
-            stream.write(b" ");
-            stream.write(message.version.as_bytes());
-            stream.write(b"\r\n");
+            stream.write(message.method.as_bytes()).unwrap();
+            stream.write(b" ").unwrap();
+            stream.write(message.path.as_bytes()).unwrap();
+            stream.write(b" ").unwrap();
+            stream.write(message.version.as_bytes()).unwrap();
+            stream.write(b"\r\n").unwrap();
             for header in &message.headers{
-                stream.write(header.key.as_bytes());
-                stream.write(b": ");
-                stream.write(header.value.as_bytes());
-                stream.write(b"\r\n");
+                stream.write(header.key.as_bytes()).unwrap();
+                stream.write(b": ").unwrap();
+                stream.write(header.value.as_bytes()).unwrap();
+                stream.write(b"\r\n").unwrap();
             }
-            stream.write(b"\r\n");
-            stream.flush();
+            stream.write(b"\r\n").unwrap();
+            stream.flush().unwrap();
         }
 
         return self.read(&mut tcp);

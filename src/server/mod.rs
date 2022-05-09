@@ -1,9 +1,7 @@
-#[path = "./http.rs"] mod http;
-
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
-use http::HttpMessage;
+use crate::http::HttpMessage;
 
 pub struct HttpServer {
     port: u32,
@@ -27,7 +25,7 @@ impl HttpServer {
                 println!("HTTP message!");
                 let message = HttpMessage::from_bytes(&buffer);
                 message.to_string();
-                let mut outStream = [0; 1024];
+                let mut out_stream = [0; 1024];
                 //message.to_bytes(&mut outStream);
                 //println!("{}", String::from_utf8_lossy(&outStream[..]));
             }
