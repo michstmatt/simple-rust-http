@@ -1,3 +1,8 @@
+use std::net::{
+    UdpSocket,
+    Ipv4Addr
+};
+
 pub enum OpCodeEnum{
     Query = 0,
     IQuery = 1,
@@ -39,9 +44,38 @@ pub struct DnsQuestion {
     q_class: u16
 }
 
-pub struct DnsMessage {
-
+pub struct DnsQuery {
+    header: DnsHeader,
+    question: DnsQuestion,
+    name: String
 }
+
+impl DnsQuery {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let h_size = std::mem::size_of::<DnsHeader>();
+        let q_size = std::mem::size_of::<DnsQuestion>();
+
+        let header_bits : &[u8]= unsafe{
+            std::slice::from_raw_parts(&self.header as *const DnsHeader as *const u8, h_size)
+        };
+
+        let question_bits : &[u8] = unsafe {
+            std::slice::from_raw_parts(&self.question as *const DnsQuestion as *const u8, q_size)
+        };
+
+        let size = h_size + q_size + self.name.len();
+        let mut packet: Vec<u8> = vec![0u8; size+1];
+        packet[0..h_size].copy_from_slice(header_bits);
+
+        let end_name = h_size + self.name.len();
+        packet[h_size .. end_name].copy_from_slice(self.name.as_bytes());
+
+        packet[end_name..size].copy_from_slice(question_bits);
+
+        return packet;
+    }
+}
+
 
 pub struct DnsResolver {}
 
@@ -60,11 +94,28 @@ impl DnsResolver {
         };
 
         let question = DnsQuestion {
-
+            q_type: 'A' as u16,
+            q_class: 1
         };
+
+        let mut fmt :String = DnsResolver::change_dns_name(&host);
+        let query = DnsQuery {
+            question: question,
+            header: dns_header,
+            name:fmt
+        };
+
+        let packet = query.as_bytes();
+
+        let socket = UdpSocket::bind("127.1.1.1:5353").unwrap();
+        let success = socket.send_to(&packet, "172.18.64.1:53").is_ok();
+
+        let mut buf = [0; 2048];
+        socket.recv_from(&mut buf).unwrap();
+        println!("{:?}", buf);
     }
 
-    pub fn change_dns_name(host: &str) -> String {
+    fn change_dns_name(host: &str) -> String {
         let mut formatted = String::new();
 
         let split = host.split(".");

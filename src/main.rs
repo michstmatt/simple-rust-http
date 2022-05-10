@@ -9,8 +9,7 @@ use server::HttpServer;
 use dns::DnsResolver;
 
 fn main() {
-    let fmt = DnsResolver::change_dns_name("www.google.com");
-    println!("{}", fmt);
+    DnsResolver::get_host_by_name("www.google.com");
     let server = HttpServer::new(8080);
     server.start();
     println!("hello");
