@@ -4,6 +4,10 @@ use std::io::{BufReader, BufRead, BufWriter};
 use std::io::prelude::*;
 use std::net::TcpStream;
 
+use crate::dns::{
+    DnsResolver
+};
+
 pub struct HttpHeader {
     key: String,
     value: String,
@@ -154,7 +158,7 @@ impl HttpClient{
                 HttpHeader{ key: String::from("Connection"), value: String::from("keep-alive") },],
                 body: HttpBody{ data: String::new() },
         };
-        return self.send(message);
+        return self.send(&host, message);
     }
 
     fn read(&self, stream: &mut TcpStream) -> HttpResponse{
@@ -164,8 +168,10 @@ impl HttpClient{
         return message;
     }
 
-    fn send(&self,message: HttpMessage) -> HttpResponse{
-        let mut tcp = TcpStream::connect("172.217.11.228:80").unwrap();
+    fn send(&self,host: &str, message: HttpMessage) -> HttpResponse{
+
+        let ip = DnsResolver::get_host_by_name(host);
+        let mut tcp = TcpStream::connect(ip+":80").unwrap();
         {
             let mut stream = BufWriter::new(&mut tcp);
             stream.write(message.method.as_bytes()).unwrap();

@@ -1,7 +1,7 @@
-use std::net::{
+use std::{net::{
     UdpSocket,
     Ipv4Addr
-};
+}, io::Read, borrow::Borrow, convert::TryInto};
 
 pub enum OpCodeEnum{
     Query = 0,
@@ -82,12 +82,19 @@ pub struct DnsHeader {
 }
 
 impl DnsHeader {
-
+    pub fn new(id:u16, h2: u16, qd: u16, an: u16, ns: u16, ar: u16) -> DnsHeader{
+        DnsHeader { id: id.to_be(), header2: h2, qd_count: qd.to_be(), an_count: an.to_be(), ns_count: ns.to_be(), ar_count: ar.to_be() }
+    }
 }
 
 pub struct DnsQuestion {
     q_type: u16,
     q_class: u16
+}
+impl DnsQuestion {
+    pub fn new(qt: u16, qc: u16) -> DnsQuestion {
+        DnsQuestion { q_type: qt.to_be(), q_class: qc.to_be() }
+    } 
 }
 
 pub struct DnsQuery {
@@ -97,6 +104,19 @@ pub struct DnsQuery {
 }
 
 impl DnsQuery {
+    fn change_dns_name(host:&String) -> Vec<u8>{
+        let mut formatted: Vec<u8> = Vec::new();
+
+        let split = host.split(".");
+        for s in split {
+            formatted.push(s.len() as u8);
+            for c in s.bytes() {
+                formatted.push(c as u8);
+            }
+        }
+        formatted.push(0);
+        return formatted;
+    }
     pub fn as_bytes(&self) -> Vec<u8> {
         let h_size = std::mem::size_of::<DnsHeader>();
         let q_size = std::mem::size_of::<DnsQuestion>();
@@ -109,15 +129,14 @@ impl DnsQuery {
             std::slice::from_raw_parts(&self.question as *const DnsQuestion as *const u8, q_size)
         };
 
-        let size = h_size + q_size + self.name.len() + 1;
-        let mut packet: Vec<u8> = vec![0u8; size+1];
-        packet[0..h_size].copy_from_slice(header_bits);
+        let name_bytes: Vec<u8> = DnsQuery::change_dns_name(&self.name);
+        let end_name = h_size + name_bytes.len();
+        let size = end_name + q_size;
 
-        let end_name = h_size + self.name.len();
-        let name_bytes = self.name.as_bytes();
-        packet[h_size .. end_name].copy_from_slice(name_bytes);
-        packet[end_name] = 0;
-        packet[end_name+1..size].copy_from_slice(question_bits);
+        let mut packet: Vec<u8> = vec![0u8; size];
+        packet[0..h_size].copy_from_slice(&header_bits);
+        packet[h_size .. end_name].copy_from_slice(&name_bytes);
+        packet[end_name..size].copy_from_slice(question_bits);
 
         return packet;
     }
@@ -126,22 +145,68 @@ impl DnsQuery {
 
 pub struct DnsResponse {
     header: DnsHeader,
+    name: String,
+    question: DnsQuestion ,
+    answer: DnsQuestion,
+    ttl: u32,
+    address: String
 }
-impl DnsResponse {
-    fn byte_to_u16(bytes: &[u8], index: usize) -> u16 {
-        return (bytes[index+1] as u16) << 8 | bytes[index] as u16;
-    }
 
-    pub fn from_bytes(bytes: &[u8]) -> DnsHeader{
+impl DnsResponse {
+    pub fn from_bytes(bytes: &[u8], len: usize) -> DnsResponse{
         let header = DnsHeader {
-            id: DnsResponse::byte_to_u16(&bytes, 0) ,
-            header2: DnsResponse::byte_to_u16(&bytes, 2),
-            qd_count: DnsResponse::byte_to_u16(&bytes, 4),
-            an_count: DnsResponse::byte_to_u16(&bytes, 6),
-            ns_count: DnsResponse::byte_to_u16(&bytes, 8),
-            ar_count: DnsResponse::byte_to_u16(&bytes, 10)
+            id: u16::from_be_bytes(bytes[0..2].try_into().unwrap()),
+            header2: u16::from_be_bytes(bytes[2..4].try_into().unwrap()), 
+            qd_count: u16::from_be_bytes(bytes[4..6].try_into().unwrap()),
+            an_count: u16::from_be_bytes(bytes[6..8].try_into().unwrap()),
+            ns_count: u16::from_be_bytes(bytes[8..10].try_into().unwrap()),
+            ar_count: u16::from_be_bytes(bytes[10..12].try_into().unwrap()),
         };
-        return header;
+
+        let start = std::mem::size_of::<DnsHeader>();
+        let mut index = start;
+        while index < len && bytes[index] != 0{
+            index += 1;
+        }
+
+        let name_vec= bytes[start..index+1].to_vec();
+        let name = String::from_utf8(name_vec).unwrap();
+
+        index += 1;
+
+        let question = DnsQuestion {
+            q_type: u16::from_be_bytes(bytes[index..index+2].try_into().unwrap()),
+            q_class: u16::from_be_bytes(bytes[index+2..index+4].try_into().unwrap()),
+        };
+        index += 4;
+
+        let name_ptr = u16::from_be_bytes(bytes[index..index+2].try_into().unwrap());
+        index += 2;
+
+        let answer = DnsQuestion {
+            q_type: u16::from_be_bytes(bytes[index..index+2].try_into().unwrap()),
+            q_class: u16::from_be_bytes(bytes[index+2..index+4].try_into().unwrap()),
+        };
+        index += 4;
+
+
+        let ttl = u32::from_be_bytes(bytes[index..index+4].try_into().unwrap());
+
+        index += 4;
+
+        let addr_len = u16::from_be_bytes(bytes[index..index+2].try_into().unwrap()) as usize;
+        index += 2;
+
+        let mut addr = format!("{}.{}.{}.{}", bytes[index], bytes[index+1], bytes[index+2], bytes[index+3]);
+
+        return DnsResponse{
+            header: header,
+            name: name,
+            question: question,
+            answer: answer,
+            ttl: ttl,
+            address: addr
+        };
     }
 }
 
@@ -149,58 +214,42 @@ pub struct DnsResolver {}
 
 impl DnsResolver {
 
-    pub fn get_host_by_name(host: &str)
+    pub fn get_host_by_name(host: &str) -> String
     {
         let header_ln2 = Header2{
             qr: false,
             op_code: OpCodeEnum::Query,
             aa: false,
             tc: false,
-            rd: true, 
+            rd: false, 
             ra: false,
             r_code:RCodeEnum::NoErr
         };
 
-        let dns_header = DnsHeader{
-            id: 1337,
-            header2: header_ln2.to_int(),
-            qd_count: 1,
-            an_count: 0,
-            ns_count: 0,
-            ar_count: 0
-        };
-
-        let question = DnsQuestion {
-            q_type:  1,
-            q_class: 1
-        };
-
-        let mut fmt :String = DnsResolver::change_dns_name(&host);
         let query = DnsQuery {
-            question: question,
-            header: dns_header,
+            header:  DnsHeader::new(
+            1337,
+            0x0001, 
+            1,
+            0,
+            0,
+            0
+            ),
+            question: DnsQuestion::new(1, 1),
             name: String::from(host)
         };
 
         let packet = query.as_bytes();
 
         let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).unwrap();
-        let success = socket.send_to(packet.as_ref(), "8.8.8.8:53").is_ok();
+        let success = socket.send_to(&packet, "8.8.8.8:53").is_ok();
 
         let mut buf = [0; 2048];
-        let len = socket.recv_from(&mut buf).unwrap();
-        let header = DnsResponse::from_bytes(&buf);
-        let h2 = Header2::from_int(header.header2);
-        println!("{:?}", buf);
+        let (len, addr) = socket.recv_from(&mut buf).unwrap();
+        let response = DnsResponse::from_bytes(&buf, len);
+
+        return response.address;
     }
 
-    fn change_dns_name(host: &str) -> String {
-        let mut formatted = String::new();
 
-        let split = host.split(".");
-        for s in split {
-            formatted = format!("{}{}{}",formatted, s.len(), s);
-        }
-        return formatted;
-    }
 }

@@ -4,13 +4,15 @@ pub mod server;
 pub mod client;
 pub mod dns;
 
-use http::HttpMessage;
-use server::HttpServer;
-use dns::DnsResolver;
+use http::{
+    HttpClient
+};
 
 fn main() {
-    DnsResolver::get_host_by_name("www.google.com");
-    let server = HttpServer::new(8080);
-    server.start();
-    println!("hello");
+    let host = "google.com";
+    let client = HttpClient::new();
+    let response = client.get(&host , "/");
+    
+    println!("Response from:{}", host);
+    response.to_string();
 }
