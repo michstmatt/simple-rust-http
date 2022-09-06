@@ -1,18 +1,21 @@
-pub mod helpers;
-pub mod http;
-pub mod server;
 pub mod client;
 pub mod dns;
+pub mod http;
+pub mod server;
 
-use http::{
-    HttpClient
-};
+use http::HttpClient;
 
 fn main() {
     let host = "google.com";
     let client = HttpClient::new();
-    let response = client.get(&host , "/");
-    
+    let response = client.get(&host, "/");
+
     println!("Response from:{}", host);
-    response.to_string();
+    println!(
+        "{}",
+        match response {
+            Ok(r) => r.to_string(),
+            Err(e) => format!("Error!: {}", e),
+        }
+    );
 }
