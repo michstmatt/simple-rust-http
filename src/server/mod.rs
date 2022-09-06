@@ -25,10 +25,13 @@ impl HttpServer {
             if buffer.starts_with(b"GET") || buffer.starts_with(b"POST") {
                 println!("HTTP message!");
                 let message = HttpMessage::from_bytes(&buffer);
-                match message {
-                    Some(m) => m.to_string(),
-                    _ => format!("ERROR: HTTP message is malformed"),
-                };
+                println!(
+                    "{}",
+                    match message {
+                        Ok(m) => m.to_string(),
+                        Err(e) => format!("ERROR: HTTP message is malformed: {}", e),
+                    }
+                );
             }
         }
         Ok(())

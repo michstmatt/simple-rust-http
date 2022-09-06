@@ -18,6 +18,14 @@ impl OpCodeEnum {
             _ => OpCodeEnum::Status,
         }
     }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            OpCodeEnum::Query => "Query",
+            OpCodeEnum::IQuery => "Inverse Query",
+            OpCodeEnum::Status => "Status"
+        }.to_string()
+    }
 }
 
 pub enum RCodeEnum {
@@ -38,6 +46,17 @@ impl RCodeEnum {
             4 => RCodeEnum::NotImplErr,
             _ => RCodeEnum::RefusedErr,
         }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            RCodeEnum::NoErr => "Ok",
+            RCodeEnum::FormatErr => "Formatting Error",
+            RCodeEnum::ServerErr => "Server Error",
+            RCodeEnum::NameErr => "Name Error",
+            RCodeEnum::NotImplErr => "Not Implemented",
+            RCodeEnum::RefusedErr => "Refused"
+        }.to_string()
     }
 }
 
@@ -73,6 +92,10 @@ impl Header2 {
             r_code: RCodeEnum::from_int(data & 0xF),
         };
     }
+
+    pub fn to_string(&self) -> String{
+        format!("qr: {}, op_code: {}, aa: {}, tc: {} rd: {}, ra: {}, r_code: {}", self.qr, self.op_code.to_string(), self.aa, self.tc, self.rd, self.ra, self.r_code.to_string())
+    }
 }
 pub struct DnsHeader {
     id: u16,
@@ -94,6 +117,9 @@ impl DnsHeader {
             ar_count: ar.to_be(),
         }
     }
+    pub fn to_string(&self) -> String {
+        format!("id: {}, h2:{}, qd: {}, an: {}, ns: {}, ar: {}", self.id, Header2::from_int(self.header2).to_string(), self.qd_count, self.an_count, self.ns_count, self.ar_count)
+    }
 }
 
 pub struct DnsQuestion {
@@ -106,6 +132,10 @@ impl DnsQuestion {
             q_type: qt.to_be(),
             q_class: qc.to_be(),
         }
+    }
+
+    pub fn to_string(&self) -> String {
+        format!("type: {}, class: {}", self.q_type, self.q_class)
     }
 }
 
@@ -158,7 +188,7 @@ fn u16_be_from_slice(slice: &[u8]) -> Result<u16, String> {
     Ok(u16::from_be_bytes(
         slice
             .try_into()
-            .map_err(|e| format!("Error mapping slice to u16"))?,
+            .map_err(|_| format!("Error mapping slice to u16"))?,
     ))
 }
 
@@ -241,6 +271,12 @@ impl DnsResponse {
             address: addr,
         })
     }
+
+    pub fn to_string(&self) -> String {
+        format!("Header: {{{}}}\r\nName: {}\r\nQuestion: {}\r\nAnswer: {}\r\nTTL: {}\r\nAddress: {}\r\n", self.header.to_string(), self.name, self.question.to_string(), self.answer.to_string(), self.ttl, self.address)
+    }
+
+
 }
 
 pub struct DnsResolver {}
@@ -268,7 +304,10 @@ impl DnsResolver {
                 e.to_string()
             )
         })?;
+
         let response = DnsResponse::from_bytes(&buf, len)?;
+
+        println!("DNS:\r\n{}", response.to_string());
 
         return Ok(response.address);
     }
